@@ -79,7 +79,7 @@ export default function SignupPage() {
       });
 
       if ('isAuthenticated' in result && result.isAuthenticated) {
-        router.replace('/');
+        router.replace('/dashboard');
         return;
       }
 

@@ -129,6 +129,13 @@ export type PublicContentDto = {
   updatedAt: number | null;
 };
 
+export type PlatformStatusDto = {
+  systemName: string | null;
+  announcements: string[];
+  version: string | null;
+  startTime: number | null;
+};
+
 export type TopupInfoDto = {
   minAmount: number;
   amountOptions: number[];

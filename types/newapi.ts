@@ -127,6 +127,14 @@ export type NewApiPublicContent = {
   [key: string]: unknown;
 };
 
+export type NewApiStatusResponse = {
+  system_name?: string;
+  announcements?: string[];
+  version?: string;
+  start_time?: number;
+  [key: string]: unknown;
+};
+
 export type NewApiTopupInfo = {
   enable_stripe_topup?: boolean;
   enable_epay_topup?: boolean;
