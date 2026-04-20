@@ -10,7 +10,7 @@ import { bffClient } from '@/lib/api/bff-client';
 export default function DashboardPage() {
   const router = useRouter();
   const ui = useDashboardUiState();
-  const { data, createToken, deleteToken, batchDeleteTokens, createTokenPending, refreshTab } = useControlPanelData(ui.activeTab);
+  const { data, createToken, deleteToken, batchDeleteTokens, createTopup, createTokenPending, refreshTab } = useControlPanelData(ui.activeTab);
   const [authChecked, setAuthChecked] = useState(false);
 
   const handleLogout = useCallback(async () => {
@@ -73,6 +73,7 @@ export default function DashboardPage() {
       onDeleteToken={deleteToken}
       onBatchDeleteTokens={batchDeleteTokens}
       onRefreshKeys={() => refreshTab('keys')}
+      onCreateTopup={createTopup}
       onLogout={handleLogout}
       createTokenPending={createTokenPending}
     />

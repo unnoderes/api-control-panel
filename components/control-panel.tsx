@@ -75,6 +75,7 @@ type ShellProps = {
   onDeleteToken: (id: string) => Promise<void>;
   onBatchDeleteTokens: (ids: string[]) => Promise<void>;
   onRefreshKeys: () => Promise<void>;
+  onCreateTopup: (amount: number) => Promise<string>;
   onLogout: () => Promise<void>;
 };
 
@@ -99,6 +100,7 @@ export function ControlPanelShell({
   onDeleteToken,
   onBatchDeleteTokens,
   onRefreshKeys,
+  onCreateTopup,
   onLogout,
 }: ShellProps) {
   const isMobile = useIsMobile();
@@ -275,6 +277,7 @@ export function ControlPanelShell({
             onDeleteToken={onDeleteToken}
             onBatchDeleteTokens={onBatchDeleteTokens}
             onRefreshKeys={onRefreshKeys}
+            onCreateTopup={onCreateTopup}
             onDarkModeToggle={onDarkModeToggle}
           />
         </section>
@@ -293,10 +296,11 @@ type RendererProps = {
   onDeleteToken: (id: string) => Promise<void>;
   onBatchDeleteTokens: (ids: string[]) => Promise<void>;
   onRefreshKeys: () => Promise<void>;
+  onCreateTopup: (amount: number) => Promise<string>;
   onDarkModeToggle: () => void;
 };
 
-function PageSectionRenderer({ tab, page, darkMode, contractCard, createTokenPending, onCreateToken, onDeleteToken, onBatchDeleteTokens, onRefreshKeys, onDarkModeToggle }: RendererProps) {
+function PageSectionRenderer({ tab, page, darkMode, contractCard, createTokenPending, onCreateToken, onDeleteToken, onBatchDeleteTokens, onRefreshKeys, onCreateTopup, onDarkModeToggle }: RendererProps) {
   if (page.status === 'loading') {
     return (
       <div className="space-y-6">
@@ -335,7 +339,7 @@ function PageSectionRenderer({ tab, page, darkMode, contractCard, createTokenPen
     case 'settings':
       return <SettingsSection page={page} contractCard={contractCard} isDarkMode={darkMode} onDarkModeToggle={onDarkModeToggle} />;
     case 'plans':
-      return <PlansSection page={page} contractCard={contractCard} />;
+      return <PlansSection page={page} contractCard={contractCard} onCreateTopup={onCreateTopup} />;
     case 'docs':
       return <DocsSection page={page} contractCard={contractCard} />;
     default:
@@ -1117,7 +1121,141 @@ function SettingsSection({
     </div>
   );
 }
-function PlansSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const plan = page.plan; return <div className="space-y-6"><SectionCard title="Billing and quota" description="Read-only until payment and recharge decisions are confirmed.">{!plan ? <EmptyState title="Billing data unavailable" message="Keep a neutral read-only state until BFF wiring is ready." /> : <div className="grid gap-4 lg:grid-cols-3"><div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Current plan</div><div className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-100">{plan.name}</div><p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{plan.description}</p></div><div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Remaining quota</div><div className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-100">{plan.remainingQuota}</div><p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Distinguish quota units from USD when the real backend arrives.</p></div><div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Top-up action</div><div className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-100">Reserved</div><p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Future BFF action can branch to recharge or payment order flows.</p></div></div>}</SectionCard>{contractCard}</div>; }
+function PlansSection({
+  page,
+  contractCard,
+  onCreateTopup,
+}: {
+  page: RendererProps['page'];
+  contractCard: React.ReactNode;
+  onCreateTopup: (amount: number) => Promise<string>;
+}) {
+  const plan = page.plan;
+  const [customAmount, setCustomAmount] = useState('');
+  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
+  const [topupPending, setTopupPending] = useState(false);
+  const [topupError, setTopupError] = useState<string | null>(null);
+
+  const amountOptions = plan?.topupInfo?.amountOptions ?? [];
+  const minAmount = plan?.topupInfo?.minAmount ?? 1;
+  const hasProvider = plan?.topupInfo?.hasProvider ?? false;
+  const effectiveAmount = selectedAmount ?? (customAmount.trim() ? Number(customAmount) : null);
+
+  async function handleTopup() {
+    if (!effectiveAmount || Number.isNaN(effectiveAmount) || effectiveAmount < minAmount) {
+      setTopupError(`Minimum topup amount is ${minAmount}`);
+      return;
+    }
+
+    setTopupPending(true);
+    setTopupError(null);
+    try {
+      const url = await onCreateTopup(effectiveAmount);
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (error) {
+      setTopupError(error instanceof Error ? error.message : 'Failed to create topup order');
+    } finally {
+      setTopupPending(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]">
+          <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Current plan</div>
+          <div className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-100">{plan?.name ?? '—'}</div>
+          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{plan?.description ?? '—'}</p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]">
+          <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Remaining quota</div>
+          <div className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-100">{plan?.remainingQuota ?? '—'}</div>
+        </div>
+        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]">
+          <div className="mb-3 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Top up</div>
+          {!hasProvider ? (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">No payment provider is currently enabled by the administrator.</p>
+          ) : (
+            <div className="space-y-3">
+              {amountOptions.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {amountOptions.map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        setSelectedAmount(opt);
+                        setCustomAmount('');
+                      }}
+                      className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                        selectedAmount === opt
+                          ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
+                          : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <input
+                type="number"
+                min={minAmount}
+                placeholder={`Custom amount (min ${minAmount})`}
+                value={customAmount}
+                onChange={(event) => {
+                  setCustomAmount(event.target.value);
+                  setSelectedAmount(null);
+                }}
+                className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:bg-[#0a0a0a] dark:text-zinc-200 dark:placeholder:text-zinc-500 dark:focus:border-zinc-600"
+              />
+              {topupError ? <p className="text-xs text-red-500">{topupError}</p> : null}
+              <Button onClick={handleTopup} disabled={topupPending || !effectiveAmount} className="w-full">
+                {topupPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                Top up
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <SectionCard title="Top-up history" description="Recent recharge records for your account.">
+        {!plan?.history || plan.history.length === 0 ? (
+          <EmptyState title="No top-up records" message="Your recharge history will appear here." />
+        ) : (
+          <div className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-800/60 dark:bg-zinc-900 dark:text-zinc-400">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Amount</th>
+                  <th className="px-4 py-3 font-medium">Method</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-200 text-zinc-600 dark:divide-zinc-800/60 dark:text-zinc-300">
+                {plan.history.map((record) => (
+                  <tr key={record.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                    <td className="px-4 py-3 font-medium">{record.amount}</td>
+                    <td className="px-4 py-3">{record.paymentMethod}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge tone={record.statusTone}>{record.statusText}</StatusBadge>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-500 dark:text-zinc-500">{record.createdAtText}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
+
+      {contractCard}
+    </div>
+  );
+}
 function DocsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const docs = page.docs ?? []; return <div className="space-y-6"><SectionCard title="Platform notices and docs" description="Prepared for notice/about/home content endpoints or external links.">{docs.length === 0 ? <EmptyState title="No docs content" message="Use this state if content endpoints are disabled or empty." /> : <div className="grid gap-4 md:grid-cols-2">{docs.map((item) => <div key={item.id} className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-100">{item.title}</div><p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">{item.description}</p><div className="mt-4 text-xs uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{item.sourceLabel}</div></div>)}</div>}</SectionCard>{contractCard}</div>; }
 function DashboardStatCard({ stat }: { stat: DashboardStat }) { return <StatCard title={stat.title} value={stat.value} trend={stat.trend} meta={stat.meta} />; }
 function ApiKeysRow({
