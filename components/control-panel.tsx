@@ -1,7 +1,7 @@
 'use client';
 
 import { type LucideIcon, Bell, BookOpen, Cpu, CreditCard, FileText, Key, LayoutDashboard, Loader2, Menu, MoreHorizontal, Moon, PanelLeftClose, PauseCircle, PlayCircle, Search, Settings, Sun, Trash2, User, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   Button,
@@ -74,6 +74,7 @@ type ShellProps = {
   onDeleteToken: (id: string) => Promise<void>;
   onBatchDeleteTokens: (ids: string[]) => Promise<void>;
   onRefreshKeys: () => Promise<void>;
+  onLogout: () => Promise<void>;
 };
 
 export function ControlPanelShell({
@@ -97,8 +98,10 @@ export function ControlPanelShell({
   onDeleteToken,
   onBatchDeleteTokens,
   onRefreshKeys,
+  onLogout,
 }: ShellProps) {
   const isMobile = useIsMobile();
+  const [logoutPending, setLogoutPending] = useState(false);
   const filteredNav = navItems.filter((item) => item.label.toLowerCase().includes(searchText.toLowerCase()));
   const currentPage = data.pages[activeTab];
 
@@ -173,7 +176,7 @@ export function ControlPanelShell({
 
           <div className="mt-auto space-y-4 border-t border-zinc-200/60 px-2 pt-6 dark:border-zinc-800">
             <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800/60 dark:bg-[#0a0a0a]">
-              <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Future session source</div>
+              <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Signed in as</div>
               <div className="text-sm font-medium text-zinc-950 dark:text-zinc-100">{data.viewer.username}</div>
               <div className="text-xs text-zinc-500 dark:text-zinc-400">{data.viewer.groupLabel}</div>
             </div>
@@ -199,9 +202,18 @@ export function ControlPanelShell({
                         Account settings
                       </button>
                       <button
-                        className="w-full rounded-md px-3 py-2 text-left text-red-600 transition-colors hover:bg-zinc-50 dark:text-red-400 dark:hover:bg-zinc-800/50"
+                        onClick={async () => {
+                          setLogoutPending(true);
+                          try {
+                            await onLogout();
+                          } finally {
+                            setLogoutPending(false);
+                          }
+                        }}
+                        disabled={logoutPending}
+                        className="w-full rounded-md px-3 py-2 text-left text-red-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400 dark:hover:bg-zinc-800/50"
                       >
-                        Future logout action
+                        {logoutPending ? 'Logging out...' : 'Log out'}
                       </button>
                     </div>
                   )}
@@ -764,7 +776,134 @@ function UsageLogsSection({ page, contractCard }: { page: RendererProps['page'];
 }
 
 function ModelsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const items = page.models ?? []; return <div className="space-y-6"><SectionCard title="Visible models" description="Prepared for `/api/user/models` and optional BFF-enriched metadata.">{items.length === 0 ? <EmptyState title="No visible models" message="Render this when the user has no accessible models in the selected group." /> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{items.map((item) => <div key={item.id} className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition-colors dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-2 flex items-center justify-between"><div className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">{item.name}</div><StatusBadge tone={item.status === 'available' ? 'success' : 'neutral'}>{item.statusLabel}</StatusBadge></div><p className="mb-4 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{item.description}</p><InfoList items={[{ label: 'Context window', value: item.contextWindow },{ label: 'Access group', value: item.groupLabel },{ label: 'Pricing source', value: item.pricingNote }]} /></div>)}</div>}</SectionCard>{contractCard}</div>; }
-function SettingsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const settings = page.settings; return <div className="space-y-6"><SectionCard title="Account settings" description="Prepared for profile fetch/update and preference mutation.">{!settings ? <EmptyState title="Settings unavailable" message="Show an error or empty state if profile payload is missing." /> : <div className="grid gap-4 lg:grid-cols-[1.4fr,1fr]"><div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-4 text-sm font-semibold text-zinc-950 dark:text-zinc-100">Profile snapshot</div><InfoList items={[{ label: 'Username', value: settings.username },{ label: 'Display name', value: settings.displayName },{ label: 'Email', value: settings.email },{ label: 'Default group', value: settings.groupLabel }]} /><div className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">Future actions: update profile, rotate password, toggle preferences.</div></div><div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900/40"><div className="mb-3 text-sm font-semibold text-zinc-950 dark:text-zinc-100">Preference placeholders</div><div className="space-y-3 text-sm text-zinc-500 dark:text-zinc-400"><div className="flex items-center justify-between"><span>Email notices</span><span>On</span></div><div className="flex items-center justify-between"><span>2FA flow</span><span>Reserved</span></div><div className="flex items-center justify-between"><span>Theme sync</span><span>UI only</span></div></div></div></div>}</SectionCard>{contractCard}</div>; }
+function SettingsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) {
+  const settings = page.settings;
+  const [form, setForm] = useState({
+    displayName: page.settings?.displayName ?? '',
+    email: page.settings?.email ?? '',
+  });
+  const [pending, setPending] = useState(false);
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const feedbackTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setForm({
+      displayName: page.settings?.displayName ?? '',
+      email: page.settings?.email ?? '',
+    });
+  }, [page.settings?.displayName, page.settings?.email]);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeoutRef.current) {
+        window.clearTimeout(feedbackTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  async function handleSave() {
+    if (!settings) {
+      return;
+    }
+
+    if (feedbackTimeoutRef.current) {
+      window.clearTimeout(feedbackTimeoutRef.current);
+    }
+
+    setPending(true);
+    setFeedback(null);
+
+    try {
+      await bffClient.user.updateMe({
+        display_name: form.displayName,
+        email: form.email,
+      });
+      setFeedback({ ok: true, text: 'Profile updated.' });
+      feedbackTimeoutRef.current = window.setTimeout(() => {
+        setFeedback(null);
+        feedbackTimeoutRef.current = null;
+      }, 3000);
+    } catch (error) {
+      setFeedback({ ok: false, text: error instanceof Error ? error.message : 'Failed to update profile.' });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Account settings" description="Prepared for profile fetch/update and preference mutation.">
+        {!settings ? (
+          <EmptyState title="Settings unavailable" message="Show an error or empty state if profile payload is missing." />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-[1.4fr,1fr]">
+            <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800/60 dark:bg-[#0a0a0a]">
+              <div className="mb-4 text-sm font-semibold text-zinc-950 dark:text-zinc-100">Profile settings</div>
+              <div className="space-y-4">
+                <Field label="Username">
+                  <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                    {settings.username}
+                  </div>
+                </Field>
+                <Field label="Display Name">
+                  <input
+                    value={form.displayName}
+                    onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))}
+                    className={inputClassName}
+                    placeholder="Display name"
+                  />
+                </Field>
+                <Field label="Email">
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                    className={inputClassName}
+                    placeholder="name@example.com"
+                  />
+                </Field>
+                <Field label="Group">
+                  <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                    {settings.groupLabel}
+                  </div>
+                </Field>
+              </div>
+
+              {feedback ? (
+                <div
+                  className={`mt-4 rounded-md border px-3 py-2 text-sm ${
+                    feedback.ok
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300'
+                      : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300'
+                  }`}
+                >
+                  {feedback.text}
+                </div>
+              ) : null}
+
+              <div className="mt-4 flex gap-3">
+                <Button onClick={handleSave} disabled={pending}>
+                  {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+                  Save changes
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900/40">
+              <div className="mb-3 text-sm font-semibold text-zinc-950 dark:text-zinc-100">Preference placeholders</div>
+              <div className="space-y-3 text-sm text-zinc-500 dark:text-zinc-400">
+                <div className="flex items-center justify-between"><span>Email notices</span><span>On</span></div>
+                <div className="flex items-center justify-between"><span>2FA flow</span><span>Reserved</span></div>
+                <div className="flex items-center justify-between"><span>Theme sync</span><span>UI only</span></div>
+              </div>
+            </div>
+          </div>
+        )}
+      </SectionCard>
+      {contractCard}
+    </div>
+  );
+}
 function PlansSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const plan = page.plan; return <div className="space-y-6"><SectionCard title="Billing and quota" description="Read-only until payment and recharge decisions are confirmed.">{!plan ? <EmptyState title="Billing data unavailable" message="Keep a neutral read-only state until BFF wiring is ready." /> : <div className="grid gap-4 lg:grid-cols-3"><div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Current plan</div><div className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-100">{plan.name}</div><p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{plan.description}</p></div><div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Remaining quota</div><div className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-100">{plan.remainingQuota}</div><p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Distinguish quota units from USD when the real backend arrives.</p></div><div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Top-up action</div><div className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-100">Reserved</div><p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Future BFF action can branch to recharge or payment order flows.</p></div></div>}</SectionCard>{contractCard}</div>; }
 function DocsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const docs = page.docs ?? []; return <div className="space-y-6"><SectionCard title="Platform notices and docs" description="Prepared for notice/about/home content endpoints or external links.">{docs.length === 0 ? <EmptyState title="No docs content" message="Use this state if content endpoints are disabled or empty." /> : <div className="grid gap-4 md:grid-cols-2">{docs.map((item) => <div key={item.id} className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-100">{item.title}</div><p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">{item.description}</p><div className="mt-4 text-xs uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{item.sourceLabel}</div></div>)}</div>}</SectionCard>{contractCard}</div>; }
 function DashboardStatCard({ stat }: { stat: DashboardStat }) { return <StatCard title={stat.title} value={stat.value} trend={stat.trend} meta={stat.meta} />; }
