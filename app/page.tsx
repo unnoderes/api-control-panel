@@ -9,7 +9,7 @@ import { bffClient } from '@/lib/api/bff-client';
 export default function DashboardPage() {
   const router = useRouter();
   const ui = useDashboardUiState();
-  const { data, createToken, createTokenPending } = useControlPanelData(ui.activeTab);
+  const { data, createToken, deleteToken, batchDeleteTokens, createTokenPending, refreshTab } = useControlPanelData(ui.activeTab);
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
@@ -60,6 +60,9 @@ export default function DashboardPage() {
       onMoreMenuToggle={ui.toggleMoreMenu}
       onNotifMenuToggle={ui.toggleNotifMenu}
       onCreateToken={createToken}
+      onDeleteToken={deleteToken}
+      onBatchDeleteTokens={batchDeleteTokens}
+      onRefreshKeys={() => refreshTab('keys')}
       createTokenPending={createTokenPending}
     />
   );

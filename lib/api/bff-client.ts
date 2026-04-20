@@ -51,6 +51,12 @@ export const bffClient = {
     list: (query = "") => bffFetch<PaginatedTokensDto>(`/api/bff/tokens${query}`),
     create: (body: Record<string, unknown>) => bffFetch<TokenDto>("/api/bff/tokens", { method: "POST", body: JSON.stringify(body) }),
     update: (body: Record<string, unknown>, query = "") => bffFetch<TokenDto>(`/api/bff/tokens${query}`, { method: "PUT", body: JSON.stringify(body) }),
+    deleteOne: (id: string) => bffFetch<{ deleted: true; id: string }>(`/api/bff/tokens/${id}`, { method: "DELETE" }),
+    batchDelete: (ids: string[]) =>
+      bffFetch<{ deleted: true }>("/api/bff/tokens/batch-delete", {
+        method: "POST",
+        body: JSON.stringify({ ids: ids.map(Number) }),
+      }),
   },
   logs: {
     list: (query = "") => bffFetch<PaginatedUsageLogsDto>(`/api/bff/logs${query}`),
