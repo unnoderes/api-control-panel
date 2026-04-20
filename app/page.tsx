@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { ControlPanelShell } from '@/components/control-panel';
 import { useControlPanelData, useDashboardUiState } from '@/hooks/use-control-panel-data';
@@ -9,8 +10,13 @@ import { bffClient } from '@/lib/api/bff-client';
 export default function DashboardPage() {
   const router = useRouter();
   const ui = useDashboardUiState();
-  const { data, createToken, createTokenPending } = useControlPanelData(ui.activeTab);
+  const { data, createToken, deleteToken, batchDeleteTokens, createTokenPending, refreshTab } = useControlPanelData(ui.activeTab);
   const [authChecked, setAuthChecked] = useState(false);
+
+  const handleLogout = useCallback(async () => {
+    await bffClient.auth.logout();
+    router.replace('/login');
+  }, [router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +45,11 @@ export default function DashboardPage() {
   }, [router]);
 
   if (!authChecked) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-zinc-500">Checking session...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+        <Loader2 className="size-6 animate-spin text-zinc-500 dark:text-zinc-400" />
+      </div>
+    );
   }
 
   return (
@@ -60,6 +70,10 @@ export default function DashboardPage() {
       onMoreMenuToggle={ui.toggleMoreMenu}
       onNotifMenuToggle={ui.toggleNotifMenu}
       onCreateToken={createToken}
+      onDeleteToken={deleteToken}
+      onBatchDeleteTokens={batchDeleteTokens}
+      onRefreshKeys={() => refreshTab('keys')}
+      onLogout={handleLogout}
       createTokenPending={createTokenPending}
     />
   );
