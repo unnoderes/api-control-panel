@@ -126,3 +126,33 @@ export type NewApiPublicContent = {
   updated_at?: number;
   [key: string]: unknown;
 };
+
+export type NewApiTopupInfo = {
+  enable_stripe_topup?: boolean;
+  enable_epay_topup?: boolean;
+  enable_waffo_topup?: boolean;
+  enable_creem_topup?: boolean;
+  min_topup?: number;
+  amount_options?: number[];
+  [key: string]: unknown;
+};
+
+export type NewApiTopupRecord = {
+  id?: number | string;
+  user_id?: number | string;
+  amount?: number;
+  money?: number;
+  trade_no?: string;
+  payment_method?: string;
+  create_time?: number;
+  complete_time?: number;
+  status?: string;
+  [key: string]: unknown;
+};
+
+export type NewApiTopupOrderResponse = {
+  url?: string;
+  payment_url?: string;
+  order_id?: string;
+  [key: string]: unknown;
+};

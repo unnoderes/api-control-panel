@@ -7,6 +7,10 @@ import type {
   PaginatedUsageLogsDto,
   PublicContentDto,
   TokenDto,
+  TopupHistoryDto,
+  TopupInfoDto,
+  TopupOrderDto,
+  TopupRecordDto,
   UsageLogDto,
   UsageStatDto,
 } from "@/types/bff";
@@ -20,6 +24,9 @@ import type {
   NewApiSelfDataPoint,
   NewApiToken,
   NewApiTokenList,
+  NewApiTopupInfo,
+  NewApiTopupOrderResponse,
+  NewApiTopupRecord,
   NewApiUser,
 } from "@/types/newapi";
 
@@ -261,5 +268,53 @@ export function mapPublicContent(raw: NewApiPublicContent | string | null | unde
     title: asNullableString(raw?.title),
     content: asNullableString(raw?.content),
     updatedAt: asNullableNumber(raw?.updated_at),
+  };
+}
+
+export function mapTopupInfo(raw: NewApiTopupInfo): TopupInfoDto {
+  const providers: TopupInfoDto["availableProviders"] = [];
+  if (raw.enable_epay_topup) providers.push("epay");
+  if (raw.enable_stripe_topup) providers.push("stripe");
+  if (raw.enable_waffo_topup) providers.push("waffo");
+
+  return {
+    minAmount: asNumber(raw.min_topup, 1),
+    amountOptions: Array.isArray(raw.amount_options) ? raw.amount_options.map((v) => asNumber(v)) : [],
+    availableProviders: providers,
+  };
+}
+
+export function mapTopupOrder(raw: NewApiTopupOrderResponse): TopupOrderDto {
+  return {
+    paymentUrl: asString(raw.payment_url ?? raw.url),
+    orderId: asNullableString(raw.order_id),
+  };
+}
+
+function mapTopupRecordStatus(status: unknown): Pick<TopupRecordDto, "status" | "statusText"> {
+  const s = typeof status === "string" ? status : "";
+  if (s === "success") return { status: "success", statusText: "Success" };
+  if (s === "pending") return { status: "pending", statusText: "Pending" };
+  if (s === "failed") return { status: "failed", statusText: "Failed" };
+  if (s === "expired") return { status: "expired", statusText: "Expired" };
+  return { status: "unknown", statusText: "Unknown" };
+}
+
+export function mapTopupHistory(raw: NewApiTopupRecord[]): TopupHistoryDto {
+  return {
+    items: raw.map((item) => {
+      const statusResult = mapTopupRecordStatus(item.status);
+      return {
+        id: asStringId(item.id),
+        amount: asNumber(item.amount),
+        money: asNumber(item.money),
+        tradeNo: asString(item.trade_no),
+        paymentMethod: asString(item.payment_method, "—"),
+        status: statusResult.status,
+        statusText: statusResult.statusText,
+        createdAtText: formatTimestamp(asNullableNumber(item.create_time)),
+        completedAtText: item.complete_time ? formatTimestamp(asNullableNumber(item.complete_time)) : null,
+      };
+    }),
   };
 }

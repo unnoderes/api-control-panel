@@ -7,6 +7,9 @@ import type {
   PublicContentDto,
   SessionDto,
   TokenDto,
+  TopupHistoryDto,
+  TopupInfoDto,
+  TopupOrderDto,
   UsageStatDto,
 } from "@/types/bff";
 
@@ -66,5 +69,14 @@ export const bffClient = {
     notice: () => bffFetch<PublicContentDto>("/api/bff/content/notice"),
     about: () => bffFetch<PublicContentDto>("/api/bff/content/about"),
     home: () => bffFetch<PublicContentDto>("/api/bff/content/home"),
+  },
+  plans: {
+    topupInfo: () => bffFetch<TopupInfoDto>("/api/bff/plans/topup-info"),
+    createTopup: (amount: number) =>
+      bffFetch<TopupOrderDto>("/api/bff/plans/topup", {
+        method: "POST",
+        body: JSON.stringify({ amount }),
+      }),
+    history: () => bffFetch<TopupHistoryDto>("/api/bff/plans/history"),
   },
 };

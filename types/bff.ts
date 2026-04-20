@@ -128,3 +128,30 @@ export type PublicContentDto = {
   content: string | null;
   updatedAt: number | null;
 };
+
+export type TopupInfoDto = {
+  minAmount: number;
+  amountOptions: number[];
+  availableProviders: Array<'epay' | 'stripe' | 'waffo'>;
+};
+
+export type TopupOrderDto = {
+  paymentUrl: string;
+  orderId: string | null;
+};
+
+export type TopupRecordDto = {
+  id: string;
+  amount: number;
+  money: number;
+  tradeNo: string;
+  paymentMethod: string;
+  status: 'pending' | 'success' | 'failed' | 'expired' | 'unknown';
+  statusText: string;
+  createdAtText: string;
+  completedAtText: string | null;
+};
+
+export type TopupHistoryDto = {
+  items: TopupRecordDto[];
+};

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { bffClient } from '@/lib/api/bff-client';
-import type { CurrentUserDto, DashboardOverviewDto, ModelDto, PaginatedTokensDto, PaginatedUsageLogsDto, PublicContentDto } from '@/types/bff';
+import type { CurrentUserDto, DashboardOverviewDto, ModelDto, PaginatedTokensDto, PaginatedUsageLogsDto, PublicContentDto, TopupHistoryDto, TopupInfoDto } from '@/types/bff';
 
 export type ControlPanelPageKey = 'dashboard' | 'keys' | 'logs' | 'models' | 'settings' | 'docs' | 'plans';
 export type DataStatus = 'loading' | 'ready' | 'error';
@@ -61,6 +61,19 @@ export type PlanSnapshot = {
   name: string;
   description: string;
   remainingQuota: string;
+  topupInfo: {
+    minAmount: number;
+    amountOptions: number[];
+    hasProvider: boolean;
+  } | null;
+  history: Array<{
+    id: string;
+    amount: number;
+    paymentMethod: string;
+    statusText: string;
+    statusTone: StatusTone;
+    createdAtText: string;
+  }>;
 };
 
 export type DocsSummary = {
@@ -386,11 +399,17 @@ export function useControlPanelData(activeTab: ControlPanelPageKey) {
     await reloadTab('keys');
   }
 
+  async function createTopup(amount: number): Promise<string> {
+    const order = await bffClient.plans.createTopup(amount);
+    return order.paymentUrl;
+  }
+
   return {
     data,
     createToken,
     deleteToken,
     batchDeleteTokens,
+    createTopup,
     createTokenPending,
     refreshTab: reloadTab,
   };
@@ -661,6 +680,8 @@ export function createMockControlPanelData(): ControlPanelPageData {
           name: 'Developer Trial',
           description: 'Read-only plan surface until recharge and online payment paths are confirmed.',
           remainingQuota: '128,400 quota',
+          topupInfo: null,
+          history: [],
         },
       },
     },
@@ -807,11 +828,37 @@ function mapDocsPage(notice: PublicContentDto, about: PublicContentDto, home: Pu
   ];
 }
 
-function mapPlanPage(overview: DashboardOverviewDto): PlanSnapshot {
+function mapPlanPage(
+  overview: DashboardOverviewDto,
+  topupInfo: TopupInfoDto | null,
+  history: TopupHistoryDto | null,
+): PlanSnapshot {
   return {
     name: overview.subscription.plan ?? 'Current plan unavailable',
     description: overview.subscription.status ?? 'Billing status unavailable',
     remainingQuota: `${formatNumber(overview.usage.remainingQuota ?? overview.user.remainingQuota)} quota`,
+    topupInfo: topupInfo
+      ? {
+          minAmount: topupInfo.minAmount,
+          amountOptions: topupInfo.amountOptions,
+          hasProvider: topupInfo.availableProviders.length > 0,
+        }
+      : null,
+    history: (history?.items ?? []).map((item) => ({
+      id: item.id,
+      amount: item.amount,
+      paymentMethod: item.paymentMethod,
+      statusText: item.statusText,
+      statusTone:
+        item.status === 'success'
+          ? 'success'
+          : item.status === 'pending'
+            ? 'warning'
+            : item.status === 'failed' || item.status === 'expired'
+              ? 'danger'
+              : 'neutral',
+      createdAtText: item.createdAtText,
+    })),
   };
 }
 
@@ -857,8 +904,16 @@ async function loadPageFromBff(activeTab: ControlPanelPageKey): Promise<{
       return { page: { docs: mapDocsPage(notice, about, home) } };
     }
     case 'plans': {
-      const overview = await bffClient.dashboard.overview();
-      return { page: { plan: mapPlanPage(overview) } };
+      const [overview, topupInfo, history] = await Promise.allSettled([
+        bffClient.dashboard.overview(),
+        bffClient.plans.topupInfo(),
+        bffClient.plans.history(),
+      ]);
+      const overviewData = overview.status === 'fulfilled' ? overview.value : null;
+      const topupInfoData = topupInfo.status === 'fulfilled' ? topupInfo.value : null;
+      const historyData = history.status === 'fulfilled' ? history.value : null;
+      if (!overviewData) throw new Error('Failed to load plan overview');
+      return { page: { plan: mapPlanPage(overviewData, topupInfoData, historyData) } };
     }
     default:
       return { page: {} };
