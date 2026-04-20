@@ -1,7 +1,7 @@
 'use client';
 
 import { type LucideIcon, Bell, BookOpen, Cpu, CreditCard, FileText, Key, LayoutDashboard, Loader2, Menu, MoreHorizontal, Moon, PanelLeftClose, PauseCircle, PlayCircle, Search, Settings, Sun, Trash2, User, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   Button,
@@ -21,6 +21,7 @@ import type {
   ControlPanelPageData,
   ControlPanelPageKey,
   DashboardStat,
+  ModelSummary,
   TokenCreateDraft,
   UsageLogRecord,
 } from '@/hooks/use-control-panel-data';
@@ -777,7 +778,73 @@ function UsageLogsSection({ page, contractCard }: { page: RendererProps['page'];
   );
 }
 
-function ModelsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const items = page.models ?? []; return <div className="space-y-6"><SectionCard title="Visible models" description="Prepared for `/api/user/models` and optional BFF-enriched metadata.">{items.length === 0 ? <EmptyState title="No visible models" message="Render this when the user has no accessible models in the selected group." /> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{items.map((item) => <div key={item.id} className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition-colors dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-2 flex items-center justify-between"><div className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">{item.name}</div><StatusBadge tone={item.status === 'available' ? 'success' : 'neutral'}>{item.statusLabel}</StatusBadge></div><p className="mb-4 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{item.description}</p><InfoList items={[{ label: 'Context window', value: item.contextWindow },{ label: 'Access group', value: item.groupLabel },{ label: 'Pricing source', value: item.pricingNote }]} /></div>)}</div>}</SectionCard>{contractCard}</div>; }
+function ModelsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) {
+  const items = page.models ?? [];
+  const [searchText, setSearchText] = useState('');
+  const [copiedModelId, setCopiedModelId] = useState<string | null>(null);
+
+  const filteredItems = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    if (!query) return items;
+    return items.filter((item) => item.name.toLowerCase().includes(query));
+  }, [items, searchText]);
+
+  async function handleCopyModelId(modelId: string) {
+    try {
+      await navigator.clipboard.writeText(modelId);
+      setCopiedModelId(modelId);
+      window.setTimeout(() => setCopiedModelId((c) => (c === modelId ? null : c)), 1500);
+    } catch {
+      setCopiedModelId(null);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Visible models" description="Enriched from `/api/bff/user/models` with metadata inference.">
+        <div className="mb-4 relative w-full md:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" />
+          <input
+            type="text"
+            placeholder="Search models..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="w-full rounded-md border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:placeholder:text-zinc-500 dark:focus:border-zinc-600"
+          />
+        </div>
+        {filteredItems.length === 0 ? (
+          <EmptyState title="No models found" message={searchText ? 'No models match your search.' : 'No accessible models in your assigned group.'} />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filteredItems.map((item) => <ModelCard key={item.id} item={item} copiedModelId={copiedModelId} onCopy={handleCopyModelId} />)}
+          </div>
+        )}
+      </SectionCard>
+      {contractCard}
+    </div>
+  );
+}
+
+function ModelCard({ item, copiedModelId, onCopy }: { item: ModelSummary; copiedModelId: string | null; onCopy: (id: string) => void }) {
+  const tone = item.status === 'available' ? 'success' : item.status === 'deprecated' ? 'danger' : 'neutral';
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition-colors dark:border-zinc-800/60 dark:bg-[#0a0a0a]">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-sm font-semibold text-zinc-950 dark:text-zinc-100 truncate">{item.name}</div>
+        <StatusBadge tone={tone}>{item.statusLabel}</StatusBadge>
+      </div>
+      <p className="mb-4 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{item.description}</p>
+      <InfoList items={[{ label: 'Context', value: item.contextWindow }, { label: 'Group', value: item.groupLabel }, { label: 'Pricing', value: item.pricingNote }]} />
+      <button
+        type="button"
+        onClick={() => onCopy(item.id)}
+        className="mt-4 text-xs text-zinc-400 hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors"
+      >
+        {copiedModelId === item.id ? 'Copied!' : 'Copy ID'}
+      </button>
+    </div>
+  );
+}
 function SettingsSection({
   page,
   contractCard,
