@@ -274,6 +274,7 @@ export function ControlPanelShell({
             onDeleteToken={onDeleteToken}
             onBatchDeleteTokens={onBatchDeleteTokens}
             onRefreshKeys={onRefreshKeys}
+            onDarkModeToggle={onDarkModeToggle}
           />
         </section>
       </main>
@@ -291,9 +292,10 @@ type RendererProps = {
   onDeleteToken: (id: string) => Promise<void>;
   onBatchDeleteTokens: (ids: string[]) => Promise<void>;
   onRefreshKeys: () => Promise<void>;
+  onDarkModeToggle: () => void;
 };
 
-function PageSectionRenderer({ tab, page, darkMode, contractCard, createTokenPending, onCreateToken, onDeleteToken, onBatchDeleteTokens, onRefreshKeys }: RendererProps) {
+function PageSectionRenderer({ tab, page, darkMode, contractCard, createTokenPending, onCreateToken, onDeleteToken, onBatchDeleteTokens, onRefreshKeys, onDarkModeToggle }: RendererProps) {
   if (page.status === 'loading') {
     return (
       <div className="space-y-6">
@@ -330,7 +332,7 @@ function PageSectionRenderer({ tab, page, darkMode, contractCard, createTokenPen
     case 'models':
       return <ModelsSection page={page} contractCard={contractCard} />;
     case 'settings':
-      return <SettingsSection page={page} contractCard={contractCard} />;
+      return <SettingsSection page={page} contractCard={contractCard} isDarkMode={darkMode} onDarkModeToggle={onDarkModeToggle} />;
     case 'plans':
       return <PlansSection page={page} contractCard={contractCard} />;
     case 'docs':
@@ -776,15 +778,37 @@ function UsageLogsSection({ page, contractCard }: { page: RendererProps['page'];
 }
 
 function ModelsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const items = page.models ?? []; return <div className="space-y-6"><SectionCard title="Visible models" description="Prepared for `/api/user/models` and optional BFF-enriched metadata.">{items.length === 0 ? <EmptyState title="No visible models" message="Render this when the user has no accessible models in the selected group." /> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{items.map((item) => <div key={item.id} className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition-colors dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-2 flex items-center justify-between"><div className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">{item.name}</div><StatusBadge tone={item.status === 'available' ? 'success' : 'neutral'}>{item.statusLabel}</StatusBadge></div><p className="mb-4 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{item.description}</p><InfoList items={[{ label: 'Context window', value: item.contextWindow },{ label: 'Access group', value: item.groupLabel },{ label: 'Pricing source', value: item.pricingNote }]} /></div>)}</div>}</SectionCard>{contractCard}</div>; }
-function SettingsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) {
+function SettingsSection({
+  page,
+  contractCard,
+  isDarkMode,
+  onDarkModeToggle,
+}: {
+  page: RendererProps['page'];
+  contractCard: React.ReactNode;
+  isDarkMode: boolean;
+  onDarkModeToggle: () => void;
+}) {
   const settings = page.settings;
+  const canUpdatePassword = true;
   const [form, setForm] = useState({
     displayName: page.settings?.displayName ?? '',
     email: page.settings?.email ?? '',
   });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
   const [pending, setPending] = useState(false);
-  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
-  const feedbackTimeoutRef = useRef<number | null>(null);
+  const [passwordPending, setPasswordPending] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [savedVisible, setSavedVisible] = useState(false);
+  const [passwordSavedVisible, setPasswordSavedVisible] = useState(false);
+  const [themeSyncEnabled, setThemeSyncEnabled] = useState(isDarkMode);
+  const savedTimeoutRef = useRef<number | null>(null);
+  const passwordSavedTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     setForm({
@@ -794,9 +818,21 @@ function SettingsSection({ page, contractCard }: { page: RendererProps['page']; 
   }, [page.settings?.displayName, page.settings?.email]);
 
   useEffect(() => {
+    if (typeof document === 'undefined') {
+      setThemeSyncEnabled(isDarkMode);
+      return;
+    }
+
+    setThemeSyncEnabled(document.documentElement.classList.contains('dark'));
+  }, [isDarkMode]);
+
+  useEffect(() => {
     return () => {
-      if (feedbackTimeoutRef.current) {
-        window.clearTimeout(feedbackTimeoutRef.current);
+      if (savedTimeoutRef.current) {
+        window.clearTimeout(savedTimeoutRef.current);
+      }
+      if (passwordSavedTimeoutRef.current) {
+        window.clearTimeout(passwordSavedTimeoutRef.current);
       }
     };
   }, []);
@@ -806,28 +842,79 @@ function SettingsSection({ page, contractCard }: { page: RendererProps['page']; 
       return;
     }
 
-    if (feedbackTimeoutRef.current) {
-      window.clearTimeout(feedbackTimeoutRef.current);
+    if (savedTimeoutRef.current) {
+      window.clearTimeout(savedTimeoutRef.current);
     }
 
     setPending(true);
-    setFeedback(null);
+    setSaveError(null);
+    setSavedVisible(false);
 
     try {
       await bffClient.user.updateMe({
         display_name: form.displayName,
         email: form.email,
       });
-      setFeedback({ ok: true, text: 'Profile updated.' });
-      feedbackTimeoutRef.current = window.setTimeout(() => {
-        setFeedback(null);
-        feedbackTimeoutRef.current = null;
-      }, 3000);
+      setSavedVisible(true);
+      savedTimeoutRef.current = window.setTimeout(() => {
+        setSavedVisible(false);
+        savedTimeoutRef.current = null;
+      }, 2000);
     } catch (error) {
-      setFeedback({ ok: false, text: error instanceof Error ? error.message : 'Failed to update profile.' });
+      setSaveError(error instanceof Error ? error.message : 'Failed to update profile.');
     } finally {
       setPending(false);
     }
+  }
+
+  async function handlePasswordSave() {
+    if (!canUpdatePassword) {
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('Passwords do not match');
+      setPasswordSavedVisible(false);
+      return;
+    }
+
+    if (passwordSavedTimeoutRef.current) {
+      window.clearTimeout(passwordSavedTimeoutRef.current);
+    }
+
+    setPasswordPending(true);
+    setPasswordError(null);
+    setPasswordSavedVisible(false);
+
+    try {
+      await bffClient.user.updateMe({
+        current_password: passwordForm.currentPassword,
+        password: passwordForm.newPassword,
+      });
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+      setPasswordSavedVisible(true);
+      passwordSavedTimeoutRef.current = window.setTimeout(() => {
+        setPasswordSavedVisible(false);
+        passwordSavedTimeoutRef.current = null;
+      }, 2000);
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : 'Failed to update password.');
+    } finally {
+      setPasswordPending(false);
+    }
+  }
+
+  function handleThemeSyncToggle() {
+    const nextValue = !themeSyncEnabled;
+    setThemeSyncEnabled(nextValue);
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', nextValue);
+    }
+    onDarkModeToggle();
   }
 
   return (
@@ -836,56 +923,106 @@ function SettingsSection({ page, contractCard }: { page: RendererProps['page']; 
         {!settings ? (
           <EmptyState title="Settings unavailable" message="Show an error or empty state if profile payload is missing." />
         ) : (
-          <div className="grid gap-4 lg:grid-cols-[1.4fr,1fr]">
-            <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800/60 dark:bg-[#0a0a0a]">
-              <div className="mb-4 text-sm font-semibold text-zinc-950 dark:text-zinc-100">Profile settings</div>
-              <div className="space-y-4">
-                <Field label="Username">
-                  <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
-                    {settings.username}
+          <div className="grid gap-4 lg:grid-cols-[1.4fr,1fr] lg:items-start">
+            <div className="space-y-4">
+              <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800/60 dark:bg-[#0a0a0a]">
+                <div className="mb-4 text-sm font-semibold text-zinc-950 dark:text-zinc-100">Profile settings</div>
+                <div className="space-y-4">
+                  <Field label="Username">
+                    <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                      {settings.username}
+                    </div>
+                  </Field>
+                  <Field label="Display Name">
+                    <input
+                      value={form.displayName}
+                      onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))}
+                      className={inputClassName}
+                      placeholder="Display name"
+                    />
+                  </Field>
+                  <Field label="Email">
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                      className={inputClassName}
+                      placeholder="name@example.com"
+                    />
+                  </Field>
+                  <Field label="Group">
+                    <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                      {settings.groupLabel}
+                    </div>
+                  </Field>
+                </div>
+
+                <div className="mt-4 flex items-center gap-3">
+                  <Button onClick={handleSave} disabled={pending}>
+                    {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+                    Save changes
+                  </Button>
+                  {savedVisible ? <span className="text-sm text-emerald-600 dark:text-emerald-400">Saved</span> : null}
+                </div>
+
+                {saveError ? (
+                  <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+                    {saveError}
                   </div>
-                </Field>
-                <Field label="Display Name">
-                  <input
-                    value={form.displayName}
-                    onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))}
-                    className={inputClassName}
-                    placeholder="Display name"
-                  />
-                </Field>
-                <Field label="Email">
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-                    className={inputClassName}
-                    placeholder="name@example.com"
-                  />
-                </Field>
-                <Field label="Group">
-                  <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
-                    {settings.groupLabel}
-                  </div>
-                </Field>
+                ) : null}
               </div>
 
-              {feedback ? (
-                <div
-                  className={`mt-4 rounded-md border px-3 py-2 text-sm ${
-                    feedback.ok
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300'
-                      : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300'
-                  }`}
-                >
-                  {feedback.text}
+              <div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800/60 dark:bg-[#0a0a0a]">
+                <div className="mb-4 text-sm font-semibold text-zinc-950 dark:text-zinc-100">Change password</div>
+                <div className="space-y-4">
+                  <Field label="Current password" required>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={passwordForm.currentPassword}
+                      onChange={(event) => setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))}
+                      className={inputClassName}
+                      placeholder="Current password"
+                      disabled={!canUpdatePassword || passwordPending}
+                    />
+                  </Field>
+                  <Field label="New password" required>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={passwordForm.newPassword}
+                      onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))}
+                      className={inputClassName}
+                      placeholder="New password"
+                      disabled={!canUpdatePassword || passwordPending}
+                    />
+                  </Field>
+                  <Field label="Confirm new password" required>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={passwordForm.confirmPassword}
+                      onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+                      className={inputClassName}
+                      placeholder="Confirm new password"
+                      disabled={!canUpdatePassword || passwordPending}
+                    />
+                  </Field>
                 </div>
-              ) : null}
 
-              <div className="mt-4 flex gap-3">
-                <Button onClick={handleSave} disabled={pending}>
-                  {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-                  Save changes
-                </Button>
+                <div className="mt-4 flex items-center gap-3">
+                  <Button onClick={handlePasswordSave} disabled={!canUpdatePassword || passwordPending}>
+                    {passwordPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {canUpdatePassword ? 'Update password' : 'Coming soon'}
+                  </Button>
+                  {passwordSavedVisible ? <span className="text-sm text-emerald-600 dark:text-emerald-400">Saved</span> : null}
+                </div>
+
+                {passwordError ? (
+                  <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+                    {passwordError}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -894,7 +1031,16 @@ function SettingsSection({ page, contractCard }: { page: RendererProps['page']; 
               <div className="space-y-3 text-sm text-zinc-500 dark:text-zinc-400">
                 <div className="flex items-center justify-between"><span>Email notices</span><span>On</span></div>
                 <div className="flex items-center justify-between"><span>2FA flow</span><span>Reserved</span></div>
-                <div className="flex items-center justify-between"><span>Theme sync</span><span>UI only</span></div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Theme sync</span>
+                  <button
+                    type="button"
+                    onClick={handleThemeSyncToggle}
+                    className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors ${themeSyncEnabled ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-zinc-300 bg-white text-zinc-600 hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'}`}
+                  >
+                    {themeSyncEnabled ? 'Dark' : 'Light'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
