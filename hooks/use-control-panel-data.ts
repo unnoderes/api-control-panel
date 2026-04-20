@@ -46,7 +46,7 @@ export type ModelSummary = {
   contextWindow: string;
   groupLabel: string;
   pricingNote: string;
-  status: 'available' | 'coming_soon';
+  status: 'available' | 'coming_soon' | 'deprecated';
   statusLabel: string;
 };
 
@@ -547,7 +547,7 @@ export function createMockControlPanelData(): ControlPanelPageData {
             description: 'Balanced latency and reasoning profile for general API workloads.',
             contextWindow: '128k tokens',
             groupLabel: 'default',
-            pricingNote: 'Waiting for server-side billing mapper',
+            pricingNote: '—',
             status: 'available',
             statusLabel: 'Available',
           },
@@ -557,7 +557,7 @@ export function createMockControlPanelData(): ControlPanelPageData {
             description: 'Reserved for higher-context analysis tasks and internal tools.',
             contextWindow: '200k tokens',
             groupLabel: 'premium',
-            pricingNote: 'Waiting for server-side billing mapper',
+            pricingNote: '—',
             status: 'coming_soon',
             statusLabel: 'Soon',
           },
@@ -733,17 +733,107 @@ function mapLogsPage(logs: PaginatedUsageLogsDto): UsageLogRecord[] {
   }));
 }
 
+type EnrichedModelDto = ModelDto & {
+  description?: string | null;
+  context_window?: number | string | null;
+  owned_by?: string | null;
+  pricing?: string | number | null;
+  deprecated?: boolean | null;
+  enabled?: boolean | null;
+  status?: string | null;
+};
+
+function formatContextWindow(value: EnrichedModelDto['context_window']): string {
+  if (value === null || value === undefined || value === '') {
+    return '—';
+  }
+
+  const numericValue = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return typeof value === 'string' ? value : '—';
+  }
+
+  if (numericValue >= 1_000_000) {
+    return `${Number((numericValue / 1_000_000).toFixed(Number.isInteger(numericValue / 1_000_000) ? 0 : 1))}M tokens`;
+  }
+
+  if (numericValue >= 1_000) {
+    return `${Number((numericValue / 1_000).toFixed(Number.isInteger(numericValue / 1_000) ? 0 : 1))}k tokens`;
+  }
+
+  return `${numericValue} tokens`;
+}
+
+function inferModelGroupLabel(item: EnrichedModelDto): string {
+  if (item.owned_by?.trim()) {
+    return item.owned_by.trim();
+  }
+
+  const modelKey = (item.id || item.name).toLowerCase();
+
+  if (modelKey.startsWith('gpt-') || modelKey.startsWith('o1') || modelKey.startsWith('o3') || modelKey.startsWith('o4')) {
+    return 'OpenAI';
+  }
+
+  if (modelKey.startsWith('claude-')) {
+    return 'Anthropic';
+  }
+
+  if (modelKey.startsWith('gemini-')) {
+    return 'Google';
+  }
+
+  if (modelKey.startsWith('qwen-')) {
+    return 'Alibaba Cloud';
+  }
+
+  if (modelKey.startsWith('deepseek-')) {
+    return 'DeepSeek';
+  }
+
+  if (modelKey.startsWith('llama-')) {
+    return 'Meta';
+  }
+
+  return '—';
+}
+
+function mapModelStatus(item: EnrichedModelDto): Pick<ModelSummary, 'status' | 'statusLabel'> {
+  if (item.deprecated) {
+    return { status: 'deprecated', statusLabel: 'Deprecated' };
+  }
+
+  if (item.enabled === false) {
+    return { status: 'coming_soon', statusLabel: 'Unavailable' };
+  }
+
+  if (item.status?.toLowerCase() === 'deprecated') {
+    return { status: 'deprecated', statusLabel: 'Deprecated' };
+  }
+
+  if (item.status?.toLowerCase() === 'disabled') {
+    return { status: 'coming_soon', statusLabel: 'Unavailable' };
+  }
+
+  return { status: 'available', statusLabel: 'Available' };
+}
+
 function mapModelsPage(models: ModelDto[]): ModelSummary[] {
-  return models.map((item) => ({
-    id: item.id,
-    name: item.name,
-    description: 'Visible to the current user via `/api/bff/user/models`.',
-    contextWindow: 'Waiting for enriched metadata',
-    groupLabel: 'Assigned by server group',
-    pricingNote: 'Waiting for billing mapper',
-    status: 'available',
-    statusLabel: 'Available',
-  }));
+  return models.map((rawItem) => {
+    const item = rawItem as EnrichedModelDto;
+    const status = mapModelStatus(item);
+
+    return {
+      id: item.id,
+      name: item.name,
+      description: item.description?.trim() || 'Available via your access group',
+      contextWindow: formatContextWindow(item.context_window),
+      groupLabel: inferModelGroupLabel(item),
+      pricingNote: item.pricing === null || item.pricing === undefined || item.pricing === '' ? '—' : String(item.pricing),
+      status: status.status,
+      statusLabel: status.statusLabel,
+    };
+  });
 }
 
 function mapDocsPage(notice: PublicContentDto, about: PublicContentDto, home: PublicContentDto): DocsSummary[] {

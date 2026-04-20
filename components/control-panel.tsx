@@ -1,7 +1,7 @@
 'use client';
 
 import { type LucideIcon, Bell, BookOpen, Cpu, CreditCard, FileText, Key, LayoutDashboard, Loader2, Menu, MoreHorizontal, Moon, PanelLeftClose, Search, Settings, Sun, User, X } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   Button,
@@ -21,6 +21,7 @@ import type {
   ControlPanelPageData,
   ControlPanelPageKey,
   DashboardStat,
+  ModelSummary,
   TokenCreateDraft,
   UsageLogRecord,
 } from '@/hooks/use-control-panel-data';
@@ -523,13 +524,123 @@ function UsageLogsSection({ page, contractCard }: { page: RendererProps['page'];
   );
 }
 
-function ModelsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const items = page.models ?? []; return <div className="space-y-6"><SectionCard title="Visible models" description="Prepared for `/api/user/models` and optional BFF-enriched metadata.">{items.length === 0 ? <EmptyState title="No visible models" message="Render this when the user has no accessible models in the selected group." /> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{items.map((item) => <div key={item.id} className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition-colors dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-2 flex items-center justify-between"><div className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">{item.name}</div><StatusBadge tone={item.status === 'available' ? 'success' : 'neutral'}>{item.statusLabel}</StatusBadge></div><p className="mb-4 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{item.description}</p><InfoList items={[{ label: 'Context window', value: item.contextWindow },{ label: 'Access group', value: item.groupLabel },{ label: 'Pricing source', value: item.pricingNote }]} /></div>)}</div>}</SectionCard>{contractCard}</div>; }
+function ModelsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) {
+  const items = page.models ?? [];
+  const [searchText, setSearchText] = useState('');
+  const [copiedModelId, setCopiedModelId] = useState<string | null>(null);
+
+  const filteredItems = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+
+    if (!query) {
+      return items;
+    }
+
+    return items.filter((item) => item.name.toLowerCase().includes(query));
+  }, [items, searchText]);
+
+  async function handleCopyModelId(modelId: string) {
+    try {
+      await navigator.clipboard.writeText(modelId);
+      setCopiedModelId(modelId);
+      window.setTimeout(() => {
+        setCopiedModelId((current) => (current === modelId ? null : current));
+      }, 1500);
+    } catch {
+      setCopiedModelId(null);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Visible models" description="Prepared for `/api/user/models` and optional BFF-enriched metadata.">
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full md:max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" />
+            <input
+              type="text"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search models by name"
+              className="w-full rounded-md border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:bg-[#0a0a0a] dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-600"
+            />
+          </div>
+          <div className="text-xs text-zinc-500 dark:text-zinc-400">
+            {filteredItems.length} / {items.length} models
+          </div>
+        </div>
+
+        {items.length === 0 ? (
+          <EmptyState title="No visible models" message="Render this when the user has no accessible models in the selected group." />
+        ) : filteredItems.length === 0 ? (
+          <EmptyState title="No matching models" message="Try a different model name keyword." />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filteredItems.map((item) => (
+              <ModelCard
+                key={item.id}
+                item={item}
+                copied={copiedModelId === item.id}
+                onCopy={() => handleCopyModelId(item.id)}
+              />
+            ))}
+          </div>
+        )}
+      </SectionCard>
+      {contractCard}
+    </div>
+  );
+}
 function SettingsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const settings = page.settings; return <div className="space-y-6"><SectionCard title="Account settings" description="Prepared for profile fetch/update and preference mutation.">{!settings ? <EmptyState title="Settings unavailable" message="Show an error or empty state if profile payload is missing." /> : <div className="grid gap-4 lg:grid-cols-[1.4fr,1fr]"><div className="rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-4 text-sm font-semibold text-zinc-950 dark:text-zinc-100">Profile snapshot</div><InfoList items={[{ label: 'Username', value: settings.username },{ label: 'Display name', value: settings.displayName },{ label: 'Email', value: settings.email },{ label: 'Default group', value: settings.groupLabel }]} /><div className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">Future actions: update profile, rotate password, toggle preferences.</div></div><div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900/40"><div className="mb-3 text-sm font-semibold text-zinc-950 dark:text-zinc-100">Preference placeholders</div><div className="space-y-3 text-sm text-zinc-500 dark:text-zinc-400"><div className="flex items-center justify-between"><span>Email notices</span><span>On</span></div><div className="flex items-center justify-between"><span>2FA flow</span><span>Reserved</span></div><div className="flex items-center justify-between"><span>Theme sync</span><span>UI only</span></div></div></div></div>}</SectionCard>{contractCard}</div>; }
 function PlansSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const plan = page.plan; return <div className="space-y-6"><SectionCard title="Billing and quota" description="Read-only until payment and recharge decisions are confirmed.">{!plan ? <EmptyState title="Billing data unavailable" message="Keep a neutral read-only state until BFF wiring is ready." /> : <div className="grid gap-4 lg:grid-cols-3"><div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Current plan</div><div className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-100">{plan.name}</div><p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{plan.description}</p></div><div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Remaining quota</div><div className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-100">{plan.remainingQuota}</div><p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Distinguish quota units from USD when the real backend arrives.</p></div><div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Top-up action</div><div className="mt-2 text-xl font-semibold text-zinc-950 dark:text-zinc-100">Reserved</div><p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Future BFF action can branch to recharge or payment order flows.</p></div></div>}</SectionCard>{contractCard}</div>; }
 function DocsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const docs = page.docs ?? []; return <div className="space-y-6"><SectionCard title="Platform notices and docs" description="Prepared for notice/about/home content endpoints or external links.">{docs.length === 0 ? <EmptyState title="No docs content" message="Use this state if content endpoints are disabled or empty." /> : <div className="grid gap-4 md:grid-cols-2">{docs.map((item) => <div key={item.id} className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-100">{item.title}</div><p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">{item.description}</p><div className="mt-4 text-xs uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{item.sourceLabel}</div></div>)}</div>}</SectionCard>{contractCard}</div>; }
 function DashboardStatCard({ stat }: { stat: DashboardStat }) { return <StatCard title={stat.title} value={stat.value} trend={stat.trend} meta={stat.meta} />; }
 function ApiKeysRow({ item }: { item: ApiKeySummary }) { return <tr className="transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"><td className="px-4 py-3 font-semibold text-zinc-950 dark:text-zinc-100">{item.name}</td><td className="px-4 py-3 font-mono text-zinc-500 dark:text-zinc-500">{item.maskedKey}</td><td className="px-4 py-3">{item.remainingQuotaText}</td><td className="px-4 py-3"><StatusBadge tone={item.statusTone}>{item.statusLabel}</StatusBadge></td><td className="px-4 py-3 text-zinc-500 dark:text-zinc-500">{item.createdAtText}</td></tr>; }
 function UsageLogRow({ record }: { record: UsageLogRecord }) { return <tr className="transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"><td className="px-4 py-3 text-zinc-500 dark:text-zinc-500">{record.timeText}</td><td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{record.model}</td><td className="px-4 py-3">{record.tokenText}</td><td className="px-4 py-3 text-zinc-500 dark:text-zinc-500">{record.quotaText}</td><td className="px-4 py-3 text-zinc-500 dark:text-zinc-500">{record.latencyText}</td></tr>; }
+function modelStatusTone(status: ModelSummary['status']) {
+  if (status === 'available') {
+    return 'success' as const;
+  }
+
+  if (status === 'deprecated') {
+    return 'warning' as const;
+  }
+
+  return 'neutral' as const;
+}
+
+function ModelCard({ item, copied, onCopy }: { item: ModelSummary; copied: boolean; onCopy: () => void }) {
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition-colors dark:border-zinc-800/60 dark:bg-[#0a0a0a]">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">{item.name}</div>
+          <div className="mt-1 break-all font-mono text-xs text-zinc-500 dark:text-zinc-400">{item.id}</div>
+        </div>
+        <StatusBadge tone={modelStatusTone(item.status)}>{item.statusLabel}</StatusBadge>
+      </div>
+
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">{item.description || '—'}</p>
+        <button
+          type="button"
+          onClick={onCopy}
+          className="shrink-0 rounded-md border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+        >
+          {copied ? 'Copied' : 'Copy ID'}
+        </button>
+      </div>
+
+      <InfoList
+        items={[
+          { label: 'Context window', value: item.contextWindow || '—' },
+          { label: 'Access group', value: item.groupLabel || '—' },
+          { label: 'Pricing', value: item.pricingNote || '—' },
+        ]}
+      />
+    </div>
+  );
+}
 function DataContractPanel({ contract }: { contract: ControlPanelPageData['pages'][ControlPanelPageKey]['contract'] }) { return <SectionCard title="Integration contract" description="This panel documents what the future BFF hook needs to provide for the page." action={contract.mockSource ? <StatusBadge tone="warning">Mock-backed</StatusBadge> : undefined}><div className="grid gap-4 lg:grid-cols-2"><InfoList items={contract.dataNeeds.map((item) => ({ label: 'Needs', value: item }))} /><InfoList items={contract.actions.map((item) => ({ label: 'Action', value: item }))} /></div><div className="mt-4 grid gap-4 lg:grid-cols-3"><StateCard title="Loading" body={contract.states.loading} /><StateCard title="Empty" body={contract.states.empty} /><StateCard title="Error" body={contract.states.error} /></div>{contract.mockSource && <div className="mt-4 rounded-md border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Replace point: {contract.mockSource}</div>}</SectionCard>; }
 function StateCard({ title, body }: { title: string; body: string }) { return <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-2 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{title}</div><div className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">{body}</div></div>; }
 export function InlineLoadingNotice({ label }: { label: string }) { return <div className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-500 dark:border-zinc-800/60 dark:bg-[#0a0a0a] dark:text-zinc-400"><Loader2 className="size-4 animate-spin" />{label}</div>; }
