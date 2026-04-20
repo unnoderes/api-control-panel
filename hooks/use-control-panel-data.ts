@@ -376,9 +376,21 @@ export function useControlPanelData(activeTab: ControlPanelPageKey) {
     }
   }
 
+  async function deleteToken(id: string) {
+    await bffClient.tokens.deleteOne(id);
+    await reloadTab('keys');
+  }
+
+  async function batchDeleteTokens(ids: string[]) {
+    await bffClient.tokens.batchDelete(ids);
+    await reloadTab('keys');
+  }
+
   return {
     data,
     createToken,
+    deleteToken,
+    batchDeleteTokens,
     createTokenPending,
     refreshTab: reloadTab,
   };
