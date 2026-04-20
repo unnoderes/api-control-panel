@@ -271,14 +271,12 @@ export function ControlPanelShell({
             tab={activeTab}
             page={currentPage}
             darkMode={isDarkMode}
-            contractCard={<DataContractPanel contract={currentPage.contract} />}
             createTokenPending={createTokenPending}
             onCreateToken={onCreateToken}
             onDeleteToken={onDeleteToken}
             onBatchDeleteTokens={onBatchDeleteTokens}
             onRefreshKeys={onRefreshKeys}
             onCreateTopup={onCreateTopup}
-            onDarkModeToggle={onDarkModeToggle}
           />
         </section>
       </main>
@@ -290,17 +288,16 @@ type RendererProps = {
   tab: ControlPanelPageKey;
   page: ControlPanelPageData['pages'][ControlPanelPageKey];
   darkMode: boolean;
-  contractCard: React.ReactNode;
+  contractCard?: React.ReactNode;
   createTokenPending: boolean;
   onCreateToken: (draft: TokenCreateDraft) => Promise<void>;
   onDeleteToken: (id: string) => Promise<void>;
   onBatchDeleteTokens: (ids: string[]) => Promise<void>;
   onRefreshKeys: () => Promise<void>;
   onCreateTopup: (amount: number) => Promise<string>;
-  onDarkModeToggle: () => void;
 };
 
-function PageSectionRenderer({ tab, page, darkMode, contractCard, createTokenPending, onCreateToken, onDeleteToken, onBatchDeleteTokens, onRefreshKeys, onCreateTopup, onDarkModeToggle }: RendererProps) {
+function PageSectionRenderer({ tab, page, darkMode, contractCard, createTokenPending, onCreateToken, onDeleteToken, onBatchDeleteTokens, onRefreshKeys, onCreateTopup }: RendererProps) {
   if (page.status === 'loading') {
     return (
       <div className="space-y-6">
@@ -313,7 +310,6 @@ function PageSectionRenderer({ tab, page, darkMode, contractCard, createTokenPen
         ) : (
           <SkeletonTable rows={6} />
         )}
-        {contractCard}
       </div>
     );
   }
@@ -322,37 +318,35 @@ function PageSectionRenderer({ tab, page, darkMode, contractCard, createTokenPen
     return (
       <div className="space-y-6">
         <ErrorState title={page.errorTitle ?? 'Load failed'} message={page.errorMessage ?? 'Unknown error'} />
-        {contractCard}
       </div>
     );
   }
 
   switch (tab) {
     case 'dashboard':
-      return <DashboardSection page={page} darkMode={darkMode} contractCard={contractCard} />;
+      return <DashboardSection page={page} darkMode={darkMode} />;
     case 'keys':
-      return <ApiKeysSection page={page} contractCard={contractCard} createTokenPending={createTokenPending} onCreateToken={onCreateToken} onDeleteToken={onDeleteToken} onBatchDeleteTokens={onBatchDeleteTokens} onRefreshKeys={onRefreshKeys} />;
+      return <ApiKeysSection page={page} createTokenPending={createTokenPending} onCreateToken={onCreateToken} onDeleteToken={onDeleteToken} onBatchDeleteTokens={onBatchDeleteTokens} onRefreshKeys={onRefreshKeys} />;
     case 'logs':
-      return <UsageLogsSection page={page} contractCard={contractCard} />;
+      return <UsageLogsSection page={page} />;
     case 'models':
-      return <ModelsSection page={page} contractCard={contractCard} />;
+      return <ModelsSection page={page} />;
     case 'settings':
-      return <SettingsSection page={page} contractCard={contractCard} isDarkMode={darkMode} onDarkModeToggle={onDarkModeToggle} />;
+      return <SettingsSection page={page} />;
     case 'plans':
-      return <PlansSection page={page} contractCard={contractCard} onCreateTopup={onCreateTopup} />;
+      return <PlansSection page={page} onCreateTopup={onCreateTopup} />;
     case 'docs':
-      return <DocsSection page={page} contractCard={contractCard} />;
+      return <DocsSection page={page} />;
     default:
-      return contractCard;
+      return contractCard ?? null;
   }
 }
 
-function DashboardSection({ page, darkMode, contractCard }: { page: RendererProps['page']; darkMode: boolean; contractCard: React.ReactNode }) {
+function DashboardSection({ page, darkMode }: { page: RendererProps['page']; darkMode: boolean }) {
   if (!page.dashboard || page.dashboard.stats.length === 0) {
     return (
       <div className="space-y-6">
         <EmptyState title="No dashboard metrics yet" message="Connect future BFF aggregates for balance, usage, and trend data." />
-        {contractCard}
       </div>
     );
   }
@@ -388,14 +382,12 @@ function DashboardSection({ page, darkMode, contractCard }: { page: RendererProp
         </ResponsiveContainer>
       </SectionCard>
 
-      {contractCard}
     </div>
   );
 }
 
 function ApiKeysSection({
   page,
-  contractCard,
   createTokenPending,
   onCreateToken,
   onDeleteToken,
@@ -403,7 +395,6 @@ function ApiKeysSection({
   onRefreshKeys,
 }: {
   page: RendererProps['page'];
-  contractCard: React.ReactNode;
   createTokenPending: boolean;
   onCreateToken: (draft: TokenCreateDraft) => Promise<void>;
   onDeleteToken: (id: string) => Promise<void>;
@@ -593,7 +584,6 @@ function ApiKeysSection({
           </div>
         )}
       </SectionCard>
-      {contractCard}
     </div>
   );
 }
@@ -609,7 +599,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 const inputClassName = 'w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-[#0a0a0a] dark:text-zinc-200 dark:placeholder:text-zinc-500 dark:focus:border-zinc-600';
 
-function UsageLogsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) {
+function UsageLogsSection({ page }: { page: RendererProps['page'] }) {
   type LogFilter = {
     keyword: string;
     modelName: string;
@@ -777,12 +767,11 @@ function UsageLogsSection({ page, contractCard }: { page: RendererProps['page'];
           </div>
         </div>
       </SectionCard>
-      {contractCard}
     </div>
   );
 }
 
-function ModelsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) {
+function ModelsSection({ page }: { page: RendererProps['page'] }) {
   const items = page.models ?? [];
   const [searchText, setSearchText] = useState('');
   const [copiedModelId, setCopiedModelId] = useState<string | null>(null);
@@ -824,7 +813,6 @@ function ModelsSection({ page, contractCard }: { page: RendererProps['page']; co
           </div>
         )}
       </SectionCard>
-      {contractCard}
     </div>
   );
 }
@@ -851,14 +839,8 @@ function ModelCard({ item, copiedModelId, onCopy }: { item: ModelSummary; copied
 }
 function SettingsSection({
   page,
-  contractCard,
-  isDarkMode,
-  onDarkModeToggle,
 }: {
   page: RendererProps['page'];
-  contractCard: React.ReactNode;
-  isDarkMode: boolean;
-  onDarkModeToggle: () => void;
 }) {
   const settings = page.settings;
   const canUpdatePassword = true;
@@ -877,7 +859,6 @@ function SettingsSection({
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [savedVisible, setSavedVisible] = useState(false);
   const [passwordSavedVisible, setPasswordSavedVisible] = useState(false);
-  const [themeSyncEnabled, setThemeSyncEnabled] = useState(isDarkMode);
   const savedTimeoutRef = useRef<number | null>(null);
   const passwordSavedTimeoutRef = useRef<number | null>(null);
 
@@ -887,15 +868,6 @@ function SettingsSection({
       email: page.settings?.email ?? '',
     });
   }, [page.settings?.displayName, page.settings?.email]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') {
-      setThemeSyncEnabled(isDarkMode);
-      return;
-    }
-
-    setThemeSyncEnabled(document.documentElement.classList.contains('dark'));
-  }, [isDarkMode]);
 
   useEffect(() => {
     return () => {
@@ -977,15 +949,6 @@ function SettingsSection({
     } finally {
       setPasswordPending(false);
     }
-  }
-
-  function handleThemeSyncToggle() {
-    const nextValue = !themeSyncEnabled;
-    setThemeSyncEnabled(nextValue);
-    if (typeof document !== 'undefined') {
-      document.documentElement.classList.toggle('dark', nextValue);
-    }
-    onDarkModeToggle();
   }
 
   return (
@@ -1097,37 +1060,17 @@ function SettingsSection({
               </div>
             </div>
 
-            <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-900/40">
-              <div className="mb-3 text-sm font-semibold text-zinc-950 dark:text-zinc-100">Preference placeholders</div>
-              <div className="space-y-3 text-sm text-zinc-500 dark:text-zinc-400">
-                <div className="flex items-center justify-between"><span>Email notices</span><span>On</span></div>
-                <div className="flex items-center justify-between"><span>2FA flow</span><span>Reserved</span></div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Theme sync</span>
-                  <button
-                    type="button"
-                    onClick={handleThemeSyncToggle}
-                    className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors ${themeSyncEnabled ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950' : 'border-zinc-300 bg-white text-zinc-600 hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'}`}
-                  >
-                    {themeSyncEnabled ? 'Dark' : 'Light'}
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </SectionCard>
-      {contractCard}
     </div>
   );
 }
 function PlansSection({
   page,
-  contractCard,
   onCreateTopup,
 }: {
   page: RendererProps['page'];
-  contractCard: React.ReactNode;
   onCreateTopup: (amount: number) => Promise<string>;
 }) {
   const plan = page.plan;
@@ -1252,11 +1195,10 @@ function PlansSection({
         )}
       </SectionCard>
 
-      {contractCard}
     </div>
   );
 }
-function DocsSection({ page, contractCard }: { page: RendererProps['page']; contractCard: React.ReactNode }) { const docs = page.docs ?? []; return <div className="space-y-6"><SectionCard title="Platform notices and docs" description="Prepared for notice/about/home content endpoints or external links.">{docs.length === 0 ? <EmptyState title="No docs content" message="Use this state if content endpoints are disabled or empty." /> : <div className="grid gap-4 md:grid-cols-2">{docs.map((item) => <div key={item.id} className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-100">{item.title}</div><p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">{item.description}</p><div className="mt-4 text-xs uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{item.sourceLabel}</div></div>)}</div>}</SectionCard>{contractCard}</div>; }
+function DocsSection({ page }: { page: RendererProps['page'] }) { const docs = page.docs ?? []; return <div className="space-y-6"><SectionCard title="Platform notices and docs" description="Prepared for notice/about/home content endpoints or external links.">{docs.length === 0 ? <EmptyState title="No docs content" message="Use this state if content endpoints are disabled or empty." /> : <div className="grid gap-4 md:grid-cols-2">{docs.map((item) => <div key={item.id} className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-2 text-sm font-semibold text-zinc-950 dark:text-zinc-100">{item.title}</div><p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">{item.description}</p><div className="mt-4 text-xs uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{item.sourceLabel}</div></div>)}</div>}</SectionCard></div>; }
 function DashboardStatCard({ stat }: { stat: DashboardStat }) { return <StatCard title={stat.title} value={stat.value} trend={stat.trend} meta={stat.meta} />; }
 function ApiKeysRow({
   item,
@@ -1295,6 +1237,4 @@ function ApiKeysRow({
   );
 }
 function UsageLogRow({ record }: { record: UsageLogRecord }) { return <tr className="transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"><td className="px-4 py-3 text-zinc-500 dark:text-zinc-500">{record.timeText}</td><td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{record.model}</td><td className="px-4 py-3">{record.tokenText}</td><td className="px-4 py-3 text-zinc-500 dark:text-zinc-500">{record.quotaText}</td><td className="px-4 py-3 text-zinc-500 dark:text-zinc-500">{record.latencyText}</td></tr>; }
-function DataContractPanel({ contract }: { contract: ControlPanelPageData['pages'][ControlPanelPageKey]['contract'] }) { return <SectionCard title="Integration contract" description="This panel documents what the future BFF hook needs to provide for the page." action={contract.mockSource ? <StatusBadge tone="warning">Mock-backed</StatusBadge> : undefined}><div className="grid gap-4 lg:grid-cols-2"><InfoList items={contract.dataNeeds.map((item) => ({ label: 'Needs', value: item }))} /><InfoList items={contract.actions.map((item) => ({ label: 'Action', value: item }))} /></div><div className="mt-4 grid gap-4 lg:grid-cols-3"><StateCard title="Loading" body={contract.states.loading} /><StateCard title="Empty" body={contract.states.empty} /><StateCard title="Error" body={contract.states.error} /></div>{contract.mockSource && <div className="mt-4 rounded-md border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Replace point: {contract.mockSource}</div>}</SectionCard>; }
-function StateCard({ title, body }: { title: string; body: string }) { return <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800/60 dark:bg-[#0a0a0a]"><div className="mb-2 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{title}</div><div className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">{body}</div></div>; }
 export function InlineLoadingNotice({ label }: { label: string }) { return <div className="flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-500 dark:border-zinc-800/60 dark:bg-[#0a0a0a] dark:text-zinc-400"><Loader2 className="size-4 animate-spin" />{label}</div>; }
