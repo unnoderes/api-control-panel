@@ -2,6 +2,7 @@ import type {
   CurrentUserDto,
   DashboardOverviewDto,
   ModelDto,
+  PlatformStatusDto,
   PaginatedTokensDto,
   PaginatedUsageLogsDto,
   PublicContentDto,
@@ -69,6 +70,9 @@ export const bffClient = {
     notice: () => bffFetch<PublicContentDto>("/api/bff/content/notice"),
     about: () => bffFetch<PublicContentDto>("/api/bff/content/about"),
     home: () => bffFetch<PublicContentDto>("/api/bff/content/home"),
+  },
+  platform: {
+    status: () => bffFetch<PlatformStatusDto>("/api/bff/platform/status"),
   },
   plans: {
     topupInfo: () => bffFetch<TopupInfoDto>("/api/bff/plans/topup-info"),

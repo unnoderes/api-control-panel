@@ -3,6 +3,7 @@ import type {
   DashboardOverviewDto,
   DashboardTrendPointDto,
   ModelDto,
+  PlatformStatusDto,
   PaginatedTokensDto,
   PaginatedUsageLogsDto,
   PublicContentDto,
@@ -21,6 +22,7 @@ import type {
   NewApiLogList,
   NewApiLogStat,
   NewApiPublicContent,
+  NewApiStatusResponse,
   NewApiSelfDataPoint,
   NewApiToken,
   NewApiTokenList,
@@ -268,6 +270,17 @@ export function mapPublicContent(raw: NewApiPublicContent | string | null | unde
     title: asNullableString(raw?.title),
     content: asNullableString(raw?.content),
     updatedAt: asNullableNumber(raw?.updated_at),
+  };
+}
+
+export function mapPlatformStatus(raw: NewApiStatusResponse | null | undefined): PlatformStatusDto {
+  return {
+    systemName: asNullableString(raw?.system_name),
+    announcements: Array.isArray(raw?.announcements)
+      ? raw.announcements.filter((item): item is string => typeof item === "string")
+      : [],
+    version: asNullableString(raw?.version),
+    startTime: asNullableNumber(raw?.start_time),
   };
 }
 

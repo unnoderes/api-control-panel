@@ -53,7 +53,7 @@ export default function LoginPage() {
         username,
         password,
       });
-      router.replace('/');
+      router.replace('/dashboard');
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Login failed.');
     } finally {
@@ -82,7 +82,7 @@ export default function LoginPage() {
         onSubmit={submit}
         footer={
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Authenticated target: <Link href="/" className="font-medium text-zinc-950 hover:underline dark:text-zinc-100">dashboard home</Link>
+            Authenticated target: <Link href="/dashboard" className="font-medium text-zinc-950 hover:underline dark:text-zinc-100">dashboard home</Link>
           </p>
         }
       />
